@@ -11,12 +11,12 @@ if not API_KEY:
     raise ValueError("RECALL_API_KEY not set in .env")
 
 class TradingClient:
-    def __init__(self, api_key):
+    def __init__(self, api_key, api_url):
         self.client = requests.Session()
         self.client.headers.update(
             {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
         )
-        self.base_url = API_URL
+        self.base_url = api_url
     
     def get_token_price(self, token_address, chain=None, specific_chain=None):
         params = {
@@ -62,7 +62,7 @@ class MartingaleAgent:
         self.level = 0
         self.entry_price = None
         self.total_amount = 0
-        self.trader = TradingClient(API_KEY)
+        self.trader = TradingClient(API_KEY, API_URL)
 
     def get_price(self):
         result = self.trader.get_token_price(TO_TOKEN)
