@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 # 加载环境变量
 load_dotenv()
 API_KEY = os.getenv("RECALL_API_KEY")
+API_URL = os.getenv("RECALL_API_URL")
 if not API_KEY:
     raise ValueError("RECALL_API_KEY not set in .env")
 
@@ -15,7 +16,7 @@ class TradingClient:
         self.client.headers.update(
             {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
         )
-        self.base_url = "https://api.competitions.recall.network/api"
+        self.base_url = API_URL
     
     def get_token_price(self, token_address, chain=None, specific_chain=None):
         params = {
