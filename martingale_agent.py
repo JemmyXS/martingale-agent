@@ -4,7 +4,7 @@ import time
 from dotenv import load_dotenv
 
 # 加载环境变量
-load_dotenv()
+load_dotenv(".evn.eth")
 API_KEY = os.getenv("RECALL_API_KEY")
 API_URL = os.getenv("RECALL_API_URL")
 if not API_KEY:
