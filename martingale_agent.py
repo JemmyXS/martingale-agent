@@ -32,7 +32,7 @@ class TradingClient:
             "fromToken": from_token,
             "toToken": to_token,
             "amount": str(amount),
-            "reason": "martingale strategy",
+            "reason": "Martingale",
             "fromChain": from_chain,
             "toChain": to_chain,
         }
@@ -54,8 +54,9 @@ class TradingClient:
 FROM_TOKEN = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"   # USDC
 TO_TOKEN = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"     # WETH
 
-BASE_AMOUNT = 100
-MAX_STEPS = 5
+BASE_AMOUNT = 20              # 每次马丁格尔的初始下单额
+MAX_TOTAL_AMOUNT = 100        # 总资金上限
+MAX_STEPS = 5                 # 最多加仓次数
 SLEEP_SEC = 10
 
 class MartingaleAgent:
@@ -79,16 +80,27 @@ class MartingaleAgent:
             return None
 
     def place_order(self, amount):
+        # 限制总资金
+        if self.total_amount + amount > MAX_TOTAL_AMOUNT:
+            amount = MAX_TOTAL_AMOUNT - self.total_amount
+            if amount <= 0:
+                print("已经达到总资金上限，无法继续加仓。")
+                return
         print(f"⏳ 开始第{self.level}层加仓，下单 USDC 数量: {amount}")
         try:
             resp = self.trader.execute_trade(
                 FROM_TOKEN, TO_TOKEN, amount
             )
             print("✅  下单结果:", resp)
-            # 用 toAmount 字段记录买到的 WETH 数量
-            token_bought = float(resp.get("toAmount", 0))
+            # 兼容 resp['toAmount'] 和 resp['transaction']['toAmount']
+            token_bought = 0
+            if "toAmount" in resp:
+                token_bought = float(resp.get("toAmount", 0))
+            elif "transaction" in resp and "toAmount" in resp["transaction"]:
+                token_bought = float(resp["transaction"]["toAmount"])
             self.total_amount += amount
             self.total_token += token_bought
+            print(f"累计买入WETH: {self.total_token}, 累计花费USDC: {self.total_amount}")
         except Exception as e:
             print("❌  下单失败:", e)
 
@@ -113,7 +125,7 @@ class MartingaleAgent:
                 break
 
         if to_token_balance > 0:
-            print(f"🪙 盈利平仓，卖出 WETH 数量: {to_token_balance}")
+            print(f"🪙 平仓，卖出 WETH 数量: {to_token_balance}")
             try:
                 result = self.trader.execute_trade(
                     TO_TOKEN, FROM_TOKEN, to_token_balance
@@ -152,16 +164,22 @@ class MartingaleAgent:
                 time.sleep(SLEEP_SEC)
             else:
                 avg_cost = self.get_avg_cost()
+                avg_cost_str = f"{avg_cost:.6f}" if avg_cost else "None"
+                # 止盈（2%）或止损（-5%）判断
                 if avg_cost and price >= avg_cost * 1.02:
                     self.close_position()
                     print(f"🎉 当前价格 {price} 高于持仓均价2% {avg_cost * 1.02}，盈利平仓，策略结束。")
-                    return True  # 盈利平仓，准备开启下一轮
+                    return True
+                elif avg_cost and price <= avg_cost * 0.95:
+                    self.close_position()
+                    print(f"⚠️ 当前价格 {price} 低于持仓均价5% {avg_cost * 0.95}，止损平仓，策略结束。")
+                    return False
                 else:
-                    print(f"价格未下跌0.2%，当前价格: {price}, 上次下单价: {self.last_order_price}，持仓均价: {avg_cost}")
+                    print(f"价格未下跌0.2%，当前价格: {price}, 上次下单价: {self.last_order_price}，持仓均价: {avg_cost_str}")
                     time.sleep(SLEEP_SEC)
         else:
             print("已达最大加仓次数，策略终止。")
-        return False  # 未盈利平仓
+        return False
 
     def run(self):
         while True:
@@ -170,7 +188,7 @@ class MartingaleAgent:
             if res:
                 print("🔄 策略已盈利平仓，重新开启新一轮...")
             else:
-                print("❌ 策略终止，等待人工介入或重启。")
+                print("❌ 策略终止或止损，等待人工介入或重启。")
                 break
 
 if __name__ == "__main__":
